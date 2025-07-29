@@ -1,0 +1,27 @@
+[
+  {
+    "name": "bottle",
+    "overlayPath": "/targets/bottle.png",
+    "promptFragment": "a water bottle or beverage bottle"
+  },
+  {
+    "name": "mug",
+    "overlayPath": "/targets/mug.png",
+    "promptFragment": "a coffee mug or drinking cup"
+  },
+  {
+    "name": "stapler",
+    "overlayPath": "/targets/stapler.png",
+    "promptFragment": "an office stapler"
+  },
+  {
+    "name": "keyboard",
+    "overlayPath": "/targets/keyboard.png",
+    "promptFragment": "a computer keyboard"
+  },
+  {
+    "name": "chair",
+    "overlayPath": "/targets/chair.png",
+    "promptFragment": "an office chair or desk chair"
+  }
+]
