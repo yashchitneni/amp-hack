@@ -1,0 +1,12 @@
+PLACEHOLDER TARGET IMAGES
+
+Please replace the following files with actual PNG images (512x512 pixels) with transparent backgrounds:
+
+- bottle.png (Water Bottle outline)
+- chair.png (Chair outline)  
+- keyboard.png (Keyboard outline)
+- mug.png (Coffee Mug outline)
+- stapler.png (Stapler outline)
+
+For now, you can use any simple icons or drawings of these objects.
+These images will be overlaid on the camera view to guide users.
