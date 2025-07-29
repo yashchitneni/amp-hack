@@ -12,12 +12,12 @@ This is an augmented reality scavenger hunt game built with Next.js 14 where pla
 ## Architecture
 - **Frontend**: Next.js 14 with TypeScript and Tailwind CSS
 - **Backend**: Next.js API Routes with Edge Functions
-- **AI Integration**: Google Gemini 1.5 Pro Vision for object recognition
+- **AI Integration**: OpenAI GPT-4o for object recognition
 - **State Management**: React useState with localStorage
 - **Deployment**: Vercel
 
 ## Environment Variables
-- `GEMINI_API_KEY` - Google AI Gemini API key (required)
+- `OPENAI_API_KEY` - OpenAI API key (required)
 
 ## Key Files
 - `src/config/gameConfig.ts` - Game objects configuration
@@ -38,8 +38,8 @@ This is an augmented reality scavenger hunt game built with Next.js 14 where pla
 ## Testing
 - Access on mobile browser for camera functionality
 - Use https for camera permissions on mobile
-- Test with actual Gemini API key for object recognition
+- Test with actual OpenAI API key for object recognition
 
 ## Deployment Notes
-- Add Gemini API key in Vercel environment variables
+- Add OpenAI API key in Vercel environment variables
 - Ensure mobile-friendly camera access over HTTPS

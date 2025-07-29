@@ -157,7 +157,7 @@ export default function GameClient() {
         <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white p-4 z-10 relative">
           <h1 className="text-4xl font-bold mb-4">Office Object Hunt</h1>
           <p className="mb-4">Find 5 items using your camera!</p>
-          <p className="mb-8 text-sm">You'll be looking for: Water Bottle, Chair, Keyboard, Coffee Mug, Stapler</p>
+          <p className="mb-8 text-sm">You'll be looking for: Water Bottle, Chair, Keyboard, Soda Can, Backpack</p>
           <button onClick={startCamera} className="px-8 py-4 bg-blue-600 rounded-lg text-xl font-bold hover:bg-blue-700">
             Start Hunt
           </button>
@@ -186,7 +186,7 @@ export default function GameClient() {
       {/* Playing state UI - overlays on video */}
       {gameState === 'playing' && (
         <>
-          {/* Simple test - very basic styling */}
+          {/* Dynamic instructions */}
           <div style={{
             position: 'fixed',
             top: 0,
@@ -199,7 +199,7 @@ export default function GameClient() {
             textAlign: 'center',
             zIndex: 99999
           }}>
-            FIND: WATER BOTTLE (ITEM 1 OF 5)
+            FIND: {currentItem?.name?.toUpperCase() || 'LOADING...'} (ITEM {currentItemIndex + 1} OF {TARGET_OBJECTS.length})
           </div>
 
           {/* Center Target Image - Fixed positioning */}
@@ -223,16 +223,43 @@ export default function GameClient() {
             </div>
           )}
 
-          {/* Shutter Button - Fixed positioning */}
-          <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2">
+          {/* Shutter Button - Always show in playing state */}
+          <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50">
             <button
               onClick={handleCapture}
               disabled={gameState !== 'playing'}
-              className="w-20 h-20 bg-white rounded-full border-4 border-gray-500 disabled:bg-gray-400 shadow-lg"
+              className="w-20 h-20 bg-white rounded-full border-4 border-gray-800 shadow-xl"
+              style={{
+                backgroundColor: 'white',
+                borderColor: '#1f2937',
+                borderWidth: '4px'
+              }}
             />
           </div>
         </>
       )}
+
+      {/* Test button - always visible, centered */}
+      <div style={{
+        position: 'fixed',
+        bottom: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        backgroundColor: 'red',
+        color: 'white',
+        padding: '10px',
+        borderRadius: '50%',
+        width: '80px',
+        height: '80px',
+        zIndex: 99999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        fontSize: '24px'
+      }} onClick={handleCapture}>
+        📷
+      </div>
     </div>
   );
 }

@@ -8,44 +8,52 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Image data and prompt are required' }, { status: 400 });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: 'API key is not configured' }, { status: 500 });
+    return NextResponse.json({ error: 'OpenAI API key is not configured' }, { status: 500 });
   }
 
-  // The image is a data URL (e.g., "data:image/jpeg;base64,..."). We need to extract the base64 part.
-  const base64ImageData = image.split(',')[1];
-
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-vision:generateContent?key=${apiKey}`, {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt },
-            {
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: base64ImageData,
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: prompt
               },
-            },
-          ],
-        }],
+              {
+                type: 'image_url',
+                image_url: {
+                  url: image,
+                  detail: 'low' // Use 'low' for faster processing and lower cost
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 10,
+        temperature: 0
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Gemini API Error:', errorText);
-      return NextResponse.json({ error: 'Failed to fetch from Gemini API' }, { status: response.status });
+      console.error('OpenAI API Error:', errorText);
+      return NextResponse.json({ error: 'Failed to fetch from OpenAI API' }, { status: response.status });
     }
 
     const data = await response.json();
 
-    const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase() ?? 'no';
+    const textResponse = data.choices?.[0]?.message?.content?.trim().toLowerCase() ?? 'no';
 
     if (textResponse.includes('yes')) {
       return NextResponse.json({ result: 'yes' });
@@ -53,7 +61,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ result: 'no' });
     }
   } catch (error) {
-    console.error('Error calling Gemini API:', error);
+    console.error('Error calling OpenAI API:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
