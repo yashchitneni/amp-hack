@@ -213,8 +213,14 @@ export default function ArHunt() {
           }
           
           const result = await response.json();
+          console.log('📱 Frontend received result:', result);
           
           if (result.match || result.offline) {
+            console.log('✅ Processing as SUCCESS:', { 
+              match: result.match, 
+              offline: result.offline,
+              reason: result.reason 
+            });
             // Better localStorage error handling
             try {
               const gameState = JSON.parse(localStorage.getItem('hunt_state_v1') || '{}');
@@ -242,6 +248,10 @@ export default function ArHunt() {
               }
             }, 2000);
           } else {
+            console.log('❌ Processing as FAILURE:', { 
+              match: result.match, 
+              offline: result.offline 
+            });
             setFlashMessage('Try again!');
           }
         } catch (err) {

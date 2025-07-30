@@ -66,17 +66,29 @@ export async function POST(request: NextRequest) {
     console.log('📡 Gemini response status:', response.status);
     
     if (!response.ok) {
-      console.error('Gemini API error:', response.status);
+      console.error('❌ Gemini API error:', response.status);
+      const errorText = await response.text();
+      console.error('❌ Error details:', errorText);
       return NextResponse.json(
-        { match: true, offline: true },
+        { match: true, offline: true, reason: `API error ${response.status}` },
         { status: 200 }
       );
     }
     
     const data = await response.json();
+    console.log('📦 Full Gemini response:', JSON.stringify(data, null, 2));
+    
     const answer = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase();
-    console.log('🎯 Gemini answer:', answer);
-    console.log('✅ Final result:', { match: answer === 'yes', offline: false });
+    console.log('🎯 Gemini raw answer:', `"${answer}"`);
+    console.log('🔍 Answer comparison:', { 
+      answer, 
+      isYes: answer === 'yes',
+      includes_yes: answer?.includes('yes'),
+      includes_no: answer?.includes('no')
+    });
+    
+    const match = answer === 'yes';
+    console.log('✅ Final result:', { match, offline: false });
     
     return NextResponse.json({
       match: answer === 'yes',
