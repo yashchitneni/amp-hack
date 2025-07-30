@@ -18,6 +18,8 @@ export default function ArHunt() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   
+  // Hydration fix: track client mounting
+  const [mounted, setMounted] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -27,17 +29,34 @@ export default function ArHunt() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<TouchPosition>({ x: 0, y: 0 });
   const [showConfetti, setShowConfetti] = useState(false);
+  const [cameraError, setCameraError] = useState<string>('');
   
+  // Hydration fix: mount check
   useEffect(() => {
-    fetch('/items.json')
-      .then(res => res.json())
-      .then(data => setItems(data))
-      .catch(err => console.error('Failed to load items:', err));
+    setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
+    const loadItems = async () => {
+      try {
+        const res = await fetch('/items.json');
+        if (!res.ok) throw new Error('Failed to fetch items');
+        const data = await res.json();
+        setItems(data);
+      } catch (err) {
+        console.error('Failed to load items:', err);
+        setCameraError('Failed to load game data');
+      }
+    };
+    
+    loadItems();
+  }, [mounted]);
   
   useEffect(() => {
-    // Only run on client side
-    if (typeof window === 'undefined') return;
+    // Only run on client side after mounting
+    if (!mounted || typeof window === 'undefined') return;
     
     const initCamera = async () => {
       try {
@@ -75,7 +94,7 @@ export default function ArHunt() {
           setStream(basicStream);
         } catch (fallbackErr) {
           console.error('Fallback camera failed:', fallbackErr);
-          setFlashMessage('Camera access denied');
+          setCameraError('Camera access denied. Please enable camera permissions.');
         }
       }
     };
@@ -87,7 +106,7 @@ export default function ArHunt() {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []); // Remove stream dependency to prevent loop
+  }, [mounted]); // Depend on mounted, not stream
   
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!overlayRef.current) return;
@@ -160,9 +179,10 @@ export default function ArHunt() {
     
     if (!resizedCtx) return;
     
-    resizedCanvas.width = 256;
-    resizedCanvas.height = 256;
-    resizedCtx.drawImage(canvas, 0, 0, 256, 256);
+    // Better resolution for AI - 512px instead of 256px
+    resizedCanvas.width = 512;
+    resizedCanvas.height = 512;
+    resizedCtx.drawImage(canvas, 0, 0, 512, 512);
     
     resizedCanvas.toBlob(async (blob) => {
       if (!blob) return;
@@ -172,25 +192,42 @@ export default function ArHunt() {
         const base64 = reader.result as string;
         
         try {
+          // Add timeout to prevent hanging
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+          
           const response = await fetch('/api/classify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               image: base64.split(',')[1],
               itemName: items[currentItemIndex].promptFragment
-            })
+            }),
+            signal: controller.signal
           });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+          }
           
           const result = await response.json();
           
           if (result.match || result.offline) {
-            const gameState = JSON.parse(localStorage.getItem('hunt_state_v1') || '{}');
-            gameState[items[currentItemIndex].name] = {
-              found: true,
-              offline: result.offline || false,
-              thumbnail: base64
-            };
-            localStorage.setItem('hunt_state_v1', JSON.stringify(gameState));
+            // Better localStorage error handling
+            try {
+              const gameState = JSON.parse(localStorage.getItem('hunt_state_v1') || '{}');
+              gameState[items[currentItemIndex].name] = {
+                found: true,
+                offline: result.offline || false,
+                thumbnail: base64
+              };
+              localStorage.setItem('hunt_state_v1', JSON.stringify(gameState));
+            } catch (storageErr) {
+              console.error('LocalStorage error:', storageErr);
+              // Continue without saving state
+            }
             
             setFlashMessage('Success! 🎉');
             setShowConfetti(true);
@@ -209,13 +246,20 @@ export default function ArHunt() {
           }
         } catch (err) {
           console.error('Classification failed:', err);
-          const gameState = JSON.parse(localStorage.getItem('hunt_state_v1') || '{}');
-          gameState[items[currentItemIndex].name] = {
-            found: true,
-            offline: true,
-            thumbnail: base64
-          };
-          localStorage.setItem('hunt_state_v1', JSON.stringify(gameState));
+          
+          // Better error handling for offline mode
+          try {
+            const gameState = JSON.parse(localStorage.getItem('hunt_state_v1') || '{}');
+            gameState[items[currentItemIndex].name] = {
+              found: true,
+              offline: true,
+              thumbnail: base64,
+              error: err instanceof Error ? err.message : 'Unknown error'
+            };
+            localStorage.setItem('hunt_state_v1', JSON.stringify(gameState));
+          } catch (storageErr) {
+            console.error('LocalStorage error in fallback:', storageErr);
+          }
           
           setFlashMessage('Offline mode - Success! 🎉');
           setShowConfetti(true);
@@ -242,8 +286,46 @@ export default function ArHunt() {
     }, 2000);
   };
   
+  // Hydration fix: show loading during mount
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black text-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4 mx-auto"></div>
+          <p>Initializing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show camera error
+  if (cameraError) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black text-white">
+        <div className="text-center p-8">
+          <div className="text-6xl mb-4">📷</div>
+          <h2 className="text-2xl mb-4">Camera Error</h2>
+          <p className="mb-4">{cameraError}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-blue-600 px-6 py-2 rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!items.length) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen bg-black text-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4 mx-auto"></div>
+          <p>Loading game data...</p>
+        </div>
+      </div>
+    );
   }
   
   const currentItem = items[currentItemIndex];
