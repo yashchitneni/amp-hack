@@ -24,6 +24,7 @@ export function GameManager({ children }: GameManagerProps) {
     show: boolean;
   }>({ message: '', type: 'success', show: false });
   const [showSummary, setShowSummary] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
 
   const { gameState, completeItem, resetGame, getProgress } = useGameState();
 
@@ -69,6 +70,11 @@ export function GameManager({ children }: GameManagerProps) {
     setShowSummary(false);
     setShowConfetti(false);
     setFlashMessage({ message: '', type: 'success', show: false });
+    setGameStarted(false);
+  };
+
+  const handleStartGame = () => {
+    setGameStarted(true);
   };
 
   const handleFlashComplete = () => {
@@ -85,6 +91,48 @@ export function GameManager({ children }: GameManagerProps) {
         items={items}
         onRestart={handleRestart}
       />
+    );
+  }
+
+  // Show home page before game starts
+  if (!gameStarted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-500 to-purple-600 flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+          <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Office Object Hunt
+          </h1>
+          <p className="text-gray-600 mb-8">
+            Find 5 office items using your camera in this AR scavenger hunt!
+          </p>
+          
+          <div className="space-y-3 mb-8">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">1</div>
+              <p className="text-left text-gray-700">Point your camera at office items</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">2</div>
+              <p className="text-left text-gray-700">Tap the camera button when you see the item</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">3</div>
+              <p className="text-left text-gray-700">Find all 5 items to complete the hunt</p>
+            </div>
+          </div>
+          
+          <button 
+            onClick={handleStartGame}
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 px-6 rounded-full hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+          >
+            Start Hunt
+          </button>
+          
+          <p className="text-xs text-gray-500 mt-4">
+            Camera permission required • Works best in well-lit areas
+          </p>
+        </div>
+      </div>
     );
   }
 

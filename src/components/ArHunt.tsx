@@ -9,181 +9,141 @@ interface ArHuntProps {
   gameProgress: { completed: number; total: number; percentage: number };
 }
 
-interface OverlayPosition {
-  x: number;
-  y: number;
-}
-
 export default function ArHunt({ currentItem, onValidationResult, gameProgress }: ArHuntProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
-  const [hasPermission, setHasPermission] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>({ x: 50, y: 50 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [error, setError] = useState<string>('');
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
 
-  // Initialize camera
-  useEffect(() => {
-    const initializeCamera = async () => {
-      try {
-        // Request camera permission
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' }
-        });
+  const initializeCamera = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Camera not supported by this browser.');
+      return;
+    }
+
+    try {
+      console.log('Requesting camera access...');
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Camera access timeout')), 10000)
+      );
+      
+      const streamPromise = navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        } 
+      });
+      
+      const stream = await Promise.race([streamPromise, timeoutPromise]) as MediaStream;
+      console.log('Camera stream received:', stream);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
         
-        const video = videoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          await video.play();
-          setHasPermission(true);
-        }
-      } catch (err) {
-        console.error('Failed to initialize camera:', err);
-        setError('Camera permission denied or initialization failed');
+        // Wait for video to load
+        await new Promise((resolve, reject) => {
+          if (videoRef.current) {
+            videoRef.current.onloadedmetadata = () => {
+              console.log('Video metadata loaded, playing...');
+              videoRef.current?.play().then(() => {
+                console.log('Video playing successfully');
+                setCameraReady(true);
+                resolve(true);
+              }).catch(reject);
+            };
+            videoRef.current.onerror = reject;
+          }
+        });
+      } else {
+        throw new Error('Video element not found');
       }
-    };
+    } catch (err) {
+      console.error('Camera error:', err);
+      setError(`Failed to access camera: ${(err as Error).message}`);
+    }
+  };
 
+  useEffect(() => {
     initializeCamera();
-
+    
     return () => {
-      // Cleanup camera stream
-      const video = videoRef.current;
-      if (video && video.srcObject) {
-        const stream = video.srcObject as MediaStream;
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
 
-  // Handle drag start
-  const handleDragStart = useCallback((clientX: number, clientY: number) => {
-    setIsDragging(true);
-    setDragStart({ x: clientX, y: clientY });
-  }, []);
-
-  // Handle drag move
-  const handleDragMove = useCallback((clientX: number, clientY: number) => {
-    if (!isDragging || !dragStart || !containerRef.current) return;
-
-    const container = containerRef.current;
-    const rect = container.getBoundingClientRect();
+  const capturePhoto = useCallback(async () => {
+    if (!currentItem || isCapturing || !cameraReady) return;
     
-    const deltaX = clientX - dragStart.x;
-    const deltaY = clientY - dragStart.y;
+    setIsCapturing(true);
     
-    const newX = Math.max(0, Math.min(100, overlayPosition.x + (deltaX / rect.width) * 100));
-    const newY = Math.max(0, Math.min(100, overlayPosition.y + (deltaY / rect.height) * 100));
-    
-    setOverlayPosition({ x: newX, y: newY });
-    setDragStart({ x: clientX, y: clientY });
-  }, [isDragging, dragStart, overlayPosition]);
-
-  // Handle drag end
-  const handleDragEnd = useCallback(() => {
-    setIsDragging(false);
-    setDragStart(null);
-  }, []);
-
-  // Mouse events
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    handleDragStart(e.clientX, e.clientY);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    handleDragMove(e.clientX, e.clientY);
-  };
-
-  // Touch events
-  const handleTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    handleDragStart(touch.clientX, touch.clientY);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    handleDragMove(touch.clientX, touch.clientY);
-  };
-
-  // Capture photo function
-  const capturePhoto = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current) return;
-
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
     
-    if (!ctx) return;
-
-    // Set canvas size to 256px (downsampled)
-    canvas.width = 256;
-    canvas.height = 256;
-
-    // Calculate aspect ratio to maintain proper scaling
-    const aspectRatio = video.videoWidth / video.videoHeight;
-    let sourceWidth = video.videoWidth;
-    let sourceHeight = video.videoHeight;
-    let sourceX = 0;
-    let sourceY = 0;
-
-    // Crop to square from center
-    if (aspectRatio > 1) {
-      sourceWidth = video.videoHeight;
-      sourceX = (video.videoWidth - video.videoHeight) / 2;
-    } else {
-      sourceHeight = video.videoWidth;
-      sourceY = (video.videoHeight - video.videoWidth) / 2;
+    if (!video || !canvas) {
+      setIsCapturing(false);
+      return;
     }
 
-    // Draw the video frame to canvas
-    ctx.drawImage(
-      video,
-      sourceX, sourceY, sourceWidth, sourceHeight,
-      0, 0, 256, 256
-    );
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setIsCapturing(false);
+      return;
+    }
 
-    // Convert canvas to blob with JPEG 80% quality and create URL
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const photoUrl = URL.createObjectURL(blob);
-        
-        // Call the validation result callback with mock validation
-        // In a real app, you'd send the blob to a server for actual validation
-        onValidationResult({
-          success: Math.random() > 0.3, // Mock 70% success rate
-          confidence: Math.random(),
-          message: Math.random() > 0.3 ? 'Item found!' : 'Try again'
-        }, photoUrl);
+    // Set canvas size to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Draw video frame to canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Convert to data URL
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5);
+    
+    try {
+      const response = await fetch('/api/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          image: imageDataUrl,
+          prompt: `Is the main object in this image a ${currentItem.name.toLowerCase()}? Reply 'yes' or 'no' only.`
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
       }
-    }, 'image/jpeg', 0.8);
-  }, [onValidationResult]);
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-black text-white">
-        <div className="text-center">
-          <p className="text-xl mb-4">Error</p>
-          <p>{error}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!hasPermission) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-black text-white">
-        <div className="text-center">
-          <p className="text-xl mb-4">Requesting Camera Permission</p>
-          <p>Please allow camera access to continue</p>
-        </div>
-      </div>
-    );
-  }
+      
+      const result = await response.json();
+      
+      // Create photo URL for display
+      const photoUrl = URL.createObjectURL(await fetch(imageDataUrl).then(r => r.blob()));
+      
+      // Call validation with result
+      onValidationResult({
+        success: result.result === 'yes',
+        confidence: result.result === 'yes' ? 0.9 : 0.1,
+        message: result.result === 'yes' ? 'Item found!' : 'Try again'
+      }, photoUrl);
+      
+    } catch (e) {
+      console.error('Capture error:', e);
+      onValidationResult({ 
+        success: false, 
+        confidence: 0,
+        message: `Error: ${(e as Error).message}` 
+      });
+    }
+    
+    setIsCapturing(false);
+  }, [currentItem, onValidationResult, isCapturing, cameraReady]);
 
   if (!currentItem) {
     return (
@@ -197,79 +157,80 @@ export default function ArHunt({ currentItem, onValidationResult, gameProgress }
   }
 
   return (
-    <div 
-      ref={containerRef}
-      className="relative w-full h-screen bg-black overflow-hidden"
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleDragEnd}
-      onMouseLeave={handleDragEnd}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleDragEnd}
-    >
-      {/* Video element for camera feed */}
+    <div className="relative w-full h-screen overflow-hidden bg-black">
+      {/* Video feed - always render so ref exists */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover"
+        autoPlay
         playsInline
         muted
+        className="absolute top-0 left-0 w-full h-full object-cover"
+        style={{ opacity: cameraReady ? 1 : 0 }}
       />
-
-      {/* Hidden canvas for photo capture */}
-      <canvas ref={canvasRef} className="hidden" />
-
-      {/* Draggable overlay */}
-      <div
-        className={`absolute w-20 h-20 bg-blue-500/70 border-2 border-white rounded-lg flex items-center justify-center cursor-move ${
-          isDragging ? 'scale-110' : ''
-        } transition-transform`}
-        style={{
-          left: `${overlayPosition.x}%`,
-          top: `${overlayPosition.y}%`,
-          transform: 'translate(-50%, -50%)',
-        }}
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-      >
-        <div className="text-white text-xs text-center font-bold">
-          Target
-        </div>
-      </div>
-
-      {/* UI Overlay */}
-      <div className="absolute inset-0 pointer-events-none">
-        {/* Top bar with current item and progress */}
-        <div className="absolute top-0 left-0 right-0 bg-black/50 p-4 pointer-events-auto">
-          <div className="text-white text-center">
-            <p className="text-sm">Find:</p>
-            <p className="text-lg font-bold">{currentItem.name}</p>
-            <div className="mt-2">
-              <p className="text-xs">
-                Progress: {gameProgress.completed}/{gameProgress.total} ({gameProgress.percentage}%)
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 pointer-events-auto">
-          <div className="flex justify-center items-center">
-            {/* Shutter button */}
-            <button
-              onClick={capturePhoto}
-              className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+      
+      {/* Hidden canvas for capture */}
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      
+      {/* Loading/Error overlay */}
+      {!cameraReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black text-white">
+          <div className="text-center p-4">
+            {error ? (
+              <>
+                <p className="text-xl mb-4 text-red-400">Camera Error</p>
+                <p className="mb-6 text-red-300">{error}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl mb-4">Starting Camera...</p>
+                <p className="mb-6">Please allow camera access when prompted</p>
+              </>
+            )}
+            <button 
+              onClick={initializeCamera}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
             >
-              <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+              {error ? 'Try Again' : 'Retry Camera Access'}
             </button>
-          </div>
-          
-          {/* Instructions */}
-          <div className="text-white text-center mt-4">
-            <p className="text-sm">
-              Drag the blue target over the {currentItem.name} and tap the shutter
+            <p className="text-sm text-gray-400 mt-4">
+              Make sure camera permissions are enabled for this site
             </p>
           </div>
         </div>
-      </div>
+      )}
+      
+      {/* Game UI - only show when camera is ready */}
+      {cameraReady && currentItem && (
+        <>
+          {/* Target overlay - center guide */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-48 h-48 border-4 border-white border-dashed rounded-lg flex items-center justify-center bg-black/20">
+              <span className="text-white text-sm font-bold">Target: {currentItem.name}</span>
+            </div>
+          </div>
+          
+          {/* Top instruction bar */}
+          <div className="absolute top-0 left-0 right-0 bg-red-600 text-white p-4 text-center">
+            <p className="text-lg font-bold">
+              FIND: {currentItem.name.toUpperCase()} (ITEM {gameProgress.completed + 1} OF {gameProgress.total})
+            </p>
+          </div>
+          
+          {/* Capture button */}
+          <button
+            onClick={capturePhoto}
+            disabled={!currentItem || isCapturing || !cameraReady}
+            className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-white text-black px-8 py-4 rounded-full font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-lg active:scale-95 transition-transform"
+          >
+            {isCapturing ? 'Capturing...' : '📷 Capture'}
+          </button>
+          
+          {/* Progress indicator */}
+          <div className="absolute top-20 left-4 bg-black/50 text-white px-3 py-2 rounded">
+            Progress: {gameProgress.completed}/{gameProgress.total}
+          </div>
+        </>
+      )}
     </div>
   );
 }

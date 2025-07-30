@@ -18,7 +18,15 @@ export function useGameState() {
     if (saved) {
       try {
         const parsedState = JSON.parse(saved);
-        setGameState(parsedState);
+        // Validate the parsed state has required properties
+        if (parsedState && Array.isArray(parsedState.completedItems)) {
+          setGameState({
+            completedItems: parsedState.completedItems || [],
+            currentItemIndex: parsedState.currentItemIndex || 0,
+            capturedPhotos: parsedState.capturedPhotos || {},
+            isComplete: parsedState.isComplete || false,
+          });
+        }
       } catch (error) {
         console.error('Failed to parse saved game state:', error);
       }
@@ -51,11 +59,14 @@ export function useGameState() {
     setGameState(initialState);
   };
 
-  const getProgress = () => ({
-    completed: gameState.completedItems.length,
-    total: 5,
-    percentage: Math.round((gameState.completedItems.length / 5) * 100),
-  });
+  const getProgress = () => {
+    const completedCount = gameState?.completedItems?.length || 0;
+    return {
+      completed: completedCount,
+      total: 5,
+      percentage: Math.round((completedCount / 5) * 100),
+    };
+  };
 
   return {
     gameState,

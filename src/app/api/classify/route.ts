@@ -1,112 +1,67 @@
+// src/app/api/classify/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import type { ClassifyRequest, ClassifyResponse, GeminiRequest, GeminiResponse } from '@/types/api';
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-vision:generateContent';
-const API_TIMEOUT = 10000; // 10 seconds
+export async function POST(req: NextRequest) {
+  const { image, prompt } = await req.json();
 
-async function downsampleImage(base64Image: string): Promise<string> {
-  // Basic server-side downsampling simulation
-  // In production, consider using sharp or similar for actual image processing
-  
-  // For now, we'll return the image as-is
-  // In a real implementation, you'd decode, resize, and re-encode
-  return base64Image;
-}
-
-async function callGeminiAPI(downsampledImage: string, itemName: string): Promise<boolean> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY not configured');
+  if (!image || !prompt) {
+    return NextResponse.json({ error: 'Image data and prompt are required' }, { status: 400 });
   }
 
-  const prompt = `Is the main object in this image a ${itemName}? Reply 'yes' or 'no' only.`;
-  
-  const requestBody: GeminiRequest = {
-    contents: [{
-      parts: [
-        { text: prompt },
-        {
-          inline_data: {
-            mime_type: 'image/jpeg',
-            data: downsampledImage
-          }
-        }
-      ]
-    }]
-  };
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: 'OpenAI API key is not configured' }, { status: 500 });
+  }
 
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: prompt
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: image,
+                  detail: 'low' // Use 'low' for faster processing and lower cost
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 10,
+        temperature: 0
+      }),
     });
 
-    clearTimeout(timeoutId);
-
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('OpenAI API Error:', errorText);
+      return NextResponse.json({ error: 'Failed to fetch from OpenAI API' }, { status: response.status });
     }
 
-    const data: GeminiResponse = await response.json();
-    
-    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-      throw new Error('Invalid response format from Gemini API');
-    }
+    const data = await response.json();
 
-    const responseText = data.candidates[0].content.parts[0].text.toLowerCase().trim();
-    return responseText === 'yes';
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-}
+    const textResponse = data.choices?.[0]?.message?.content?.trim().toLowerCase() ?? 'no';
 
-export async function POST(request: NextRequest) {
-  try {
-    const body: ClassifyRequest = await request.json();
-    
-    if (!body.image || !body.itemName) {
-      return NextResponse.json(
-        { error: 'Missing required fields: image and itemName' },
-        { status: 400 }
-      );
-    }
-
-    try {
-      // Downsample the image
-      const downsampledImage = await downsampleImage(body.image);
-      
-      // Call Gemini API
-      const isMatch = await callGeminiAPI(downsampledImage, body.itemName);
-      
-      const response: ClassifyResponse = {
-        success: isMatch
-      };
-      
-      return NextResponse.json(response);
-    } catch (apiError) {
-      console.error('Gemini API error:', apiError);
-      
-      // Offline fallback - auto-pass
-      const fallbackResponse: ClassifyResponse = {
-        success: true,
-        offline: true
-      };
-      
-      return NextResponse.json(fallbackResponse);
+    if (textResponse.includes('yes')) {
+      return NextResponse.json({ result: 'yes' });
+    } else {
+      return NextResponse.json({ result: 'no' });
     }
   } catch (error) {
-    console.error('Classification error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Error calling OpenAI API:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
