@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     console.log('🤖 Sending to Gemini:', { prompt, imageSize: image.length });
     
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
@@ -42,13 +42,13 @@ export async function POST(request: NextRequest) {
           contents: [{
             parts: [
               {
-                text: prompt
-              },
-              {
                 inline_data: {
                   mime_type: 'image/jpeg',
                   data: image
                 }
+              },
+              {
+                text: prompt
               }
             ]
           }],
@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
             topK: 1,
             topP: 1,
             maxOutputTokens: 10,
+            response_mime_type: "text/plain"
           }
         })
       }
